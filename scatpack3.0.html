@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>StartDesktop V2.5 | Dual Method (socat + WebSocket Node)</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg: #0a0f1a;
+            --panel: #11131f;
+            --text: #eaeef5;
+            --text-dim: #8a8faa;
+            --border: #2a2e42;
+            --button-bg: #2c3e50;
+            --button-hover: #3a3e55;
+            --terminal-bg: #0a0c12;
+            --terminal-text: #2ecc71;
+            --accent: #ffaa55;
+            --success: #27ae60;
+            --error: #e74c3c;
+            --card: #1a1d2e;
+        }
+        
+        body.dark {
+            --bg: #0a0f1a;
+            --panel: #11131f;
+            --text: #eaeef5;
+            --text-dim: #8a8faa;
+            --border: #2a2e42;
+            --button-bg: #2a2e42;
+            --button-hover: #3a3e55;
+            --terminal-bg: #0a0c12;
+            --terminal-text: #2ecc71;
+            --card: #1a1d2e;
+        }
+        
+        body {
+            background: var(--bg);
+            font-family: 'Segoe UI', 'Fira Code', monospace;
+            padding: 20px;
+            transition: background 0.2s;
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+            padding-right: 8px;
+            scroll-behavior: smooth;
+        }
+        
+        /* TABS */
+        .main-tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--border);
+        }
+        .main-tab {
+            padding: 10px 25px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-bottom: none;
+            border-radius: 12px 12px 0 0;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        .main-tab:hover { background: var(--accent); color: var(--bg); }
+        .main-tab.active { background: var(--accent); color: var(--bg); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        /* TOOLBAR */
+        .toolbar {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 12px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+        }
+        .search-box {
+            flex: 1;
+            display: flex;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 30px;
+            padding: 6px 16px;
+            align-items: center;
+        }
+        .search-box input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text);
+            font-size: 13px;
+        }
+        button {
+            background: var(--button-bg);
+            border: none;
+            padding: 7px 18px;
+            border-radius: 30px;
+            color: white;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        button:hover { filter: brightness(1.1); transform: scale(0.97); }
+        .btn-success { background: #27ae60; }
+        .btn-warning { background: #e67e22; }
+        .btn-danger { background: #e74c3c; }
+        .btn-primary { background: #ffaa55; color: #0a0f1a; }
+        
+        /* BUILDER */
+        .builder {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 14px 18px;
+            margin-bottom: 20px;
+        }
+        .builder-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: flex-end;
+            margin-bottom: 12px;
+        }
+        .builder-field { flex: 1; min-width: 130px; }
+        .builder-field.port-field { flex: 0 0 auto; min-width: 110px; }
+        .builder-field.command-field { flex: 2; min-width: 170px; }
+        .builder-field label {
+            display: block;
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #ffaa55;
+            margin-bottom: 4px;
+        }
+        .builder-field input {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            font-family: monospace;
+            font-size: 13px;
+        }
+        .port-control { display: flex; gap: 5px; align-items: center; }
+        .port-control input { width: 65px !important; text-align: center; }
+        .port-control button { width: 34px; padding: 6px 0; }
+        .builder-actions { display: flex; gap: 10px; margin-left: auto; }
+        .btn-run { background: #27ae60; }
+        
+        /* WebSocket 8080 specific */
+        .ws8080-status {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-left: 10px;
+            background: #2c3e50;
+        }
+        .ws8080-connected {
+            background: #2ecc71;
+            color: #0a0f1a;
+        }
+        .ws8080-disconnected {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        /* ROW SPLIT */
+        .row-split { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 20px; }
+        .row-split .collapsible-section:first-child { flex: 0 0 calc(25% - 15px); min-width: 200px; }
+        .row-split .collapsible-section:last-child { flex: 0 0 calc(75% - 5px); min-width: 300px; }
+        .collapsible-section {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .section-header {
+            padding: 12px 16px;
+            background: var(--button-bg);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            font-size: 13px;
+        }
+        .section-header:hover { filter: brightness(1.05); }
+        .section-arrow { font-size: 12px; transition: transform 0.2s; }
+        .section-arrow.collapsed { transform: rotate(-90deg); }
+        .section-content { flex: 1; overflow-y: auto; }
+        .section-content.collapsed { display: none; }
+        .row-split .collapsible-section:first-child .section-content { overflow-y: visible; }
+        .row-split .collapsible-section:last-child .section-content { max-height: 240px; overflow-y: auto; }
+        
+        /* SOCAT GROUPS */
+        .socat-groups-container { padding: 8px 0; }
+        .socat-group { border-bottom: 1px solid var(--border); }
+        .socat-group-header {
+            padding: 10px 12px;
+            background: var(--button-bg);
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #ffaa55;
+        }
+        .group-arrow { font-size: 11px; transition: transform 0.2s; }
+        .group-arrow.collapsed { transform: rotate(-90deg); }
+        .socat-group-items { padding: 4px 0; max-height: 300px; overflow-y: auto; }
+        .socat-group-items.collapsed { display: none; }
+        .socat-item {
+            padding: 8px 12px 8px 28px;
+            cursor: pointer;
+            font-size: 12px;
+            border-left: 2px solid transparent;
+        }
+        .socat-item:hover { background: var(--dropdown-hover); border-left-color: #ffaa55; }
+        .socat-item-title { font-weight: 500; font-size: 12px; }
+        .socat-item-url { font-size: 10px; opacity: 0.6; font-family: monospace; margin-top: 2px; }
+        .socat-note { font-size: 10px; margin-top: 8px; text-align: center; opacity: 0.7; padding: 6px; }
+        
+        /* TERMINAL (Old) */
+        .terminal-box {
+            background: var(--terminal-bg);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .terminal-header {
+            padding: 8px 14px;
+            background: #0d0f16;
+            border-bottom: 1px solid #2a2e45;
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+        }
+        .terminal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 12px;
+            font-family: monospace;
+            font-size: 12px;
+            color: var(--terminal-text);
+        }
+        .terminal-line { padding: 4px 0; border-bottom: 1px solid #1a1d2e; font-size: 12px; }
+        
+        /* BUTTONS GRID */
+        .buttons-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+            margin: 16px 0;
+        }
+        
+        /* EDITABLE BUTTONS */
+        .action-btn {
+            background: var(--button-bg);
+            border-radius: 16px;
+            padding: 10px 12px;
+            cursor: pointer;
+            transition: 0.2s;
+            position: relative;
+            border-left: 5px solid #ffaa55;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+        }
+        .action-btn:hover { transform: translateY(-2px); filter: brightness(1.05); }
+        .btn-title { font-weight: bold; font-size: 1rem; margin-bottom: 4px; padding: 0 28px; cursor: pointer; }
+        .btn-id-category-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+        .btn-id { font-size: 10px; opacity: 0.7; font-family: monospace; }
+        .btn-category {
+            font-size: 10px;
+            opacity: 0.8;
+            font-family: monospace;
+            color: #ffaa55;
+            background: rgba(0,0,0,0.2);
+            padding: 2px 8px;
+            border-radius: 12px;
+            cursor: pointer;
+        }
+        .btn-link-preview { font-size: 12px; background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 20px; word-break: break-all; cursor: pointer; }
+        .edit-icon, .edit-label-icon {
+            position: absolute;
+            top: 8px;
+            width: 26px;
+            height: 26px;
+            background: var(--edit-bg);
+            border-radius: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .edit-icon { right: 10px; }
+        .edit-label-icon { left: 10px; }
+        .drag-handle {
+            position: absolute;
+            bottom: 6px;
+            left: 8px;
+            cursor: grab;
+            opacity: 0.5;
+            font-size: 14px;
+        }
+        
+        /* DEBUG PANEL */
+        .debug-panel {
+            background: var(--debug-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            margin-top: 20px;
+        }
+        .debug-header {
+            padding: 8px 14px;
+            background: var(--button-bg);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+        }
+        .debug-content {
+            max-height: 120px;
+            overflow-y: auto;
+            padding: 8px;
+            font-family: monospace;
+            font-size: 10px;
+        }
+        .debug-content.collapsed { display: none; }
+        
+        /* TERMINAL DISPLAY */
+        .terminal-display {
+            background: var(--terminal-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            margin-top: 20px;
+            overflow: hidden;
+        }
+        .terminal-display-header {
+            background: var(--button-bg);
+            padding: 10px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+        .terminal-display-header h4 {
+            color: var(--accent);
+            font-size: 13px;
+        }
+        .terminal-display-content {
+            height: 250px;
+            overflow-y: auto;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            color: var(--terminal-text);
+            line-height: 1.45;
+        }
+        .terminal-display-line {
+            padding: 4px 0;
+            border-bottom: 1px solid #1a1d2e;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .terminal-display-cmd {
+            color: var(--accent);
+        }
+        
+        .ws-status {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-left: 10px;
+        }
+        .ws-connected {
+            background: #2ecc71;
+            color: #0a0f1a;
+        }
+        .ws-disconnected {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .no-results-message {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 50px;
+            background: var(--panel);
+            border-radius: 20px;
+            color: var(--text-dim);
+        }
+        
+        .save-indicator, .notification {
+            position: fixed;
+            background: #27ae60;
+            padding: 8px 20px;
+            border-radius: 40px;
+            z-index: 1000;
+            opacity: 0;
+            transition: 0.2s;
+            pointer-events: none;
+            font-size: 13px;
+        }
+        .save-indicator { top: 20px; right: 20px; }
+        .notification { bottom: 20px; right: 20px; background: #1e2a3a; border-left: 4px solid #ffaa55; }
+        .save-indicator.show, .notification.show { opacity: 1; }
+        
+        footer { text-align: center; margin-top: 20px; font-size: 11px; opacity: 0.6; }
+        
+        @media (max-width: 800px) {
+            .row-split { flex-direction: column; }
+            .row-split .collapsible-section:first-child,
+            .row-split .collapsible-section:last-child { flex: 1; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="main-tabs">
+        <div class="main-tab active" data-tab="dashboard">🎮 Dashboard</div>
+        <div class="main-tab" data-tab="profilemanager">📁 Profile Manager</div>
+        <div class="main-tab" data-tab="settings">⚙️ Settings</div>
+    </div>
+    
+    <!-- DASHBOARD TAB -->
+    <div id="dashboard" class="tab-content active">
+        <div class="toolbar">
+            <div class="search-box"><span>🔍</span><input type="text" id="searchInput" placeholder="Search buttons..."></div>
+            <button id="clearSearchBtn">Clear</button>
+            <button id="loadProfileBtn" class="btn-primary">📂 LOAD PROFILE</button>
+            <button id="resetBtn" class="btn-danger">⚡ Reset Defaults</button>
+            <button id="darkModeBtn" class="dark-toggle">🌙 Dark</button>
+        </div>
+        
+        <div class="buttons-grid" id="buttonsGrid"></div>
+        
+        <!-- DUAL BUILDER ROWS: Original socat + New WebSocket 8080 -->
+        <div class="builder">
+            <div class="builder-row">
+                <div class="builder-field"><label>🔗 LINK</label><input type="text" id="linkInput" value="http://localhost:"></div>
+                <div class="builder-field port-field"><label>🔌 PORT (socat)</label><div class="port-control"><input type="text" id="portInput" value="9000"><button id="portMinus">-</button><button id="portPlus">+</button></div></div>
+                <div class="builder-field command-field"><label>📡 COMMAND (socat)</label><input type="text" id="commandInput" value="/socat9000"></div>
+                <div class="builder-actions"><button id="runBtn" class="btn-run">▶ RUN (socat)</button></div>
+            </div>
+            <div class="builder-row">
+                <div class="builder-field command-field"><label>🔌 WEBSOCKET 8080 COMMAND (raw terminal)</label><input type="text" id="websocket8080Input" placeholder="e.g., sudo apt-get update"></div>
+                <div class="builder-actions">
+                    <button id="runWebsocket8080Btn" class="btn-run">▶ SEND via WS → Node → socat</button>
+                    <span id="ws8080StatusBadge" class="ws8080-status ws8080-disconnected">⚫ WS8080</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row-split">
+            <div class="collapsible-section">
+                <div class="section-header" id="socatHeader"><h4>🎯 SOCAT SERVERS (Click Port Group)</h4><span class="section-arrow" id="socatArrow">▼</span></div>
+                <div class="section-content" id="socatContent"><div class="socat-groups-container" id="socatGroupsContainer"></div></div>
+            </div>
+            <div class="collapsible-section">
+                <div class="section-header" id="terminalHeader"><h4>🖥️ COMMAND OUTPUT</h4><span class="section-arrow" id="terminalArrow">▼</span></div>
+                <div class="section-content" id="terminalContent">
+                    <div class="terminal-box"><div class="terminal-header">📡 Live command log</div><div class="terminal-body" id="terminalBody"><div id="terminalLines"></div></div></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="debug-panel">
+            <div class="debug-header" id="debugHeader"><span>🐛 DEBUG LOGS</span><span>▼</span></div>
+            <div class="debug-content" id="debugContent"></div>
+        </div>
+        
+        <!-- TERMINAL DISPLAY with WebSocket Status (for output, port 3001) -->
+        <div class="terminal-display" id="terminalDisplay">
+            <div class="terminal-display-header">
+                <div>
+                    <h4 style="display: inline-block;">📟 TERMINAL OUTPUT</h4>
+                    <span id="wsStatus" class="ws-status ws-disconnected">⚫ WebSocket Disconnected</span>
+                </div>
+                <div>
+                    <button id="clearTerminalBtn" style="background:#e74c3c; border:none; color:white; padding:4px 12px; border-radius:4px; cursor:pointer; font-size:11px;">🗑️ Clear</button>
+                </div>
+            </div>
+            <div class="terminal-display-content" id="terminalDisplayContent">
+                <div class="terminal-display-line">> Waiting for WebSocket connection...</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- PROFILE MANAGER TAB (unchanged) -->
+    <div id="profilemanager" class="tab-content">
+        <div style="margin-bottom: 20px;">
+            <h2>📁 Button Profile Manager</h2>
+            <p>Create, edit, and manage button profiles — all saved in your browser (localStorage)</p>
+        </div>
+        
+        <div class="profile-toolbar" style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;">
+            <button id="newProfileBtn" class="btn-success">➕ New Profile</button>
+            <button id="saveProfileBtn" class="btn-primary">💾 Save Current Profile</button>
+            <button id="deleteProfileBtn" class="btn-danger">🗑️ Delete Profile</button>
+            <select id="profileSelectDropdown" style="background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px; color: var(--text);">
+                <option value="">-- Select Profile --</option>
+            </select>
+            <button id="loadProfileDropdownBtn" class="btn-primary">📂 Load</button>
+        </div>
+        
+        <div class="profile-editor">
+            <div class="profile-details" style="background: var(--card); padding: 15px; border-radius: 12px; margin-bottom: 20px;">
+                <input type="text" id="profileName" placeholder="Profile Name" style="width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px; color:var(--text); margin-bottom:10px;">
+                <input type="text" id="profileDescription" placeholder="Description" style="width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px; color:var(--text);">
+            </div>
+            <div class="buttons-editor">
+                <h3>Buttons (A1 - A20)</h3>
+                <div id="buttonsEditorGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; max-height: 500px; overflow-y: auto; padding: 10px; background: var(--card); border-radius: 12px;"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- SETTINGS TAB (unchanged except added note) -->
+    <div id="settings" class="tab-content">
+        <div style="background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 20px;">
+            <h3>⚙️ Application Settings</h3>
+            <div style="margin: 15px 0;">
+                <label>WebSocket Port (for terminal output):</label>
+                <input type="number" id="wsPort" value="3001" style="display: block; margin-top: 5px; padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text);">
+                <button id="reconnectWsBtn" style="margin-top: 8px; background: #3498db;">🔄 Reconnect WebSocket</button>
+            </div>
+            <div style="margin: 15px 0; display: flex; justify-content: space-between; align-items: center;">
+                <label>Auto-save after edits</label>
+                <div id="autoSaveToggle" style="width: 50px; height: 24px; background: #2ecc71; border-radius: 30px; cursor: pointer; position: relative;"><div style="position: absolute; width: 20px; height: 20px; background: white; border-radius: 50%; top: 2px; right: 4px;"></div></div>
+            </div>
+            <button id="clearStorageBtn" class="btn-danger">🗑️ Clear All Local Data</button>
+            <hr style="margin: 20px 0; border-color: var(--border);">
+            <div style="font-size: 12px; color: var(--text-dim);">
+                <strong>Info:</strong> The <strong>WebSocket 8080 method</strong> sends commands to <code>ws://localhost:8080/shell</code> (your Node server), which forwards them to your socat HTTP parser on port . Works with <code>scatnode-main.js</code>.
+            </div>
+        </div>
+    </div>
+    
+    <footer>🦇 <a href="http://startdesktop.com" target="_blank"><font size="4px">StartDesktop</font></a> V2.5 | Dual Method (socat + WebSocket Node) | <a href="https://github.com/offternet/StartDesktop" target="_blank">Source & MIT License</a></footer>
+</div>
+<div class="save-indicator" id="saveIndicator">💾 Saved</div>
+<div class="notification" id="notification">Ready</div>
+
+<script>
+    // ======================== V2.5 - DUAL METHOD ========================
+    // Existing code (profile manager, buttons, socat groups, debug, terminal output via port 3001)
+    // plus NEW WebSocket 8080 command sender.
+    
+    let buttonDataMap = new Map();
+    let dragSourceElement = null;
+    let terminalLines = [];
+    let debugLines = [];
+    let currentProfileId = null;
+    let allProfiles = {};
+    let autoSave = true;
+    let ws = null;               // WebSocket for terminal output (port 3001)
+    let wsConnected = false;
+    
+    // NEW: WebSocket for sending commands (port 8080)
+    let ws8080 = null;
+    let ws8080Connected = false;
+    
+    // DOM elements
+    const buttonsGridEl = document.getElementById('buttonsGrid');
+    const terminalDiv = document.getElementById('terminalLines');
+    const debugDiv = document.getElementById('debugContent');
+    const searchInput = document.getElementById('searchInput');
+    const terminalDisplayContent = document.getElementById('terminalDisplayContent');
+    const wsStatusSpan = document.getElementById('wsStatus');
+    const ws8080StatusBadge = document.getElementById('ws8080StatusBadge');
+    
+    function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
+    
+    function showNotification(msg, isError = false) { 
+        const n = document.getElementById('notification'); 
+        n.textContent = isError ? `⚠️ ${msg}` : `✅ ${msg}`; 
+        n.classList.add('show'); 
+        setTimeout(() => n.classList.remove('show'), 2000); 
+    }
+    
+    function addDebug(msg) { debugLines.unshift(`[${new Date().toLocaleTimeString()}] ${msg}`); if (debugLines.length > 100) debugLines.pop(); renderDebug(); }
+    function addTerminal(msg) { terminalLines.unshift({ time: new Date().toLocaleTimeString(), text: msg }); if (terminalLines.length > 50) terminalLines.pop(); renderTerminal(); }
+    function renderDebug() { if(debugDiv) debugDiv.innerHTML = debugLines.map(l => `<div class="debug-line">${escapeHtml(l)}</div>`).join(''); }
+    function renderTerminal() { 
+        if(terminalDiv) terminalDiv.innerHTML = terminalLines.slice(0, 30).map(l => `<div class="terminal-line">[${l.time}] ${escapeHtml(l.text)}</div>`).join(''); 
+        const tb = document.getElementById('terminalBody'); 
+        if(tb) tb.scrollTop = 0;
+    }
+    
+    // ========== TERMINAL DISPLAY FUNCTIONS (unchanged) ==========
+    function displayTerminalContent(content) {
+        if (!terminalDisplayContent) return;
+        terminalDisplayContent.innerHTML = '';
+        const lines = content.split('\n');
+        lines.forEach(line => {
+            const lineDiv = document.createElement('div');
+            lineDiv.className = 'terminal-display-line';
+            if (line.startsWith('CMD:')) {
+                lineDiv.innerHTML = `<span class="terminal-display-cmd">$ ${escapeHtml(line.substring(4).trim())}</span>`;
+            } else if (line.startsWith('---')) {
+                lineDiv.style.borderBottom = '1px solid #2a2e42';
+                lineDiv.style.margin = '4px 0';
+                lineDiv.innerHTML = '';
+            } else if (line.startsWith('EXIT CODE:')) {
+                const code = line.substring(10).trim();
+                lineDiv.style.color = code === '0' ? '#2ecc71' : '#e74c3c';
+                lineDiv.innerHTML = `⚡ Exit: ${escapeHtml(code)}`;
+            } else if (line.trim()) {
+                lineDiv.innerHTML = escapeHtml(line);
+            }
+            if (lineDiv.innerHTML) terminalDisplayContent.appendChild(lineDiv);
+        });
+        terminalDisplayContent.scrollTop = terminalDisplayContent.scrollHeight;
+    }
+    
+    function clearTerminalDisplay() {
+        if (terminalDisplayContent) {
+            terminalDisplayContent.innerHTML = '<div class="terminal-display-line">> Terminal cleared. Waiting for output...</div>';
+            addDebug('Terminal display cleared');
+            showNotification('Terminal cleared');
+        }
+    }
+    
+    // ========== WEBSOCKET FOR TERMINAL OUTPUT (port 3001) ==========
+    function connectWebSocket() {
+        const port = document.getElementById('wsPort')?.value || 3001;
+        const wsUrl = `ws://localhost:${port}`;
+        if (ws) ws.close();
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => {
+            wsConnected = true;
+            wsStatusSpan.textContent = '🟢 WebSocket Connected';
+            wsStatusSpan.className = 'ws-status ws-connected';
+            addDebug(`WebSocket (output) connected to ${wsUrl}`);
+            showNotification('Terminal WebSocket connected');
+        };
+        ws.onmessage = (event) => { displayTerminalContent(event.data); addDebug('Terminal output received via WebSocket'); };
+        ws.onerror = (err) => { addDebug(`WebSocket output error: ${err.message}`); wsStatusSpan.textContent = '🔴 WebSocket Error'; wsStatusSpan.className = 'ws-status ws-disconnected'; };
+        ws.onclose = () => {
+            wsConnected = false;
+            wsStatusSpan.textContent = '⚫ WebSocket Disconnected';
+            wsStatusSpan.className = 'ws-status ws-disconnected';
+            addDebug('WebSocket (output) disconnected');
+            setTimeout(() => { if (!wsConnected) connectWebSocket(); }, 5000);
+        };
+    }
+    function reconnectWebSocket() { addDebug('Manual WebSocket reconnection requested'); connectWebSocket(); }
+    
+    // ========== NEW: WEBSOCKET 8080 COMMAND SENDER ==========
+    function connectWebSocket8080() {
+        if (ws8080 && (ws8080.readyState === WebSocket.OPEN || ws8080.readyState === WebSocket.CONNECTING)) return;
+        ws8080 = new WebSocket('ws://localhost:8080/shell');
+        ws8080.onopen = () => {
+            ws8080Connected = true;
+            ws8080StatusBadge.textContent = '🟢 WS8080';
+            ws8080StatusBadge.className = 'ws8080-status ws8080-connected';
+            addDebug('[WS8080] Connected to ws://localhost:8080/shell');
+        };
+        ws8080.onerror = (err) => {
+            ws8080Connected = false;
+            ws8080StatusBadge.textContent = '🔴 WS8080';
+            ws8080StatusBadge.className = 'ws8080-status ws8080-disconnected';
+            addDebug(`[WS8080] Error: ${err.message}`, true);
+        };
+        ws8080.onclose = () => {
+            ws8080Connected = false;
+            ws8080StatusBadge.textContent = '⚫ WS8080';
+            ws8080StatusBadge.className = 'ws8080-status ws8080-disconnected';
+            addDebug('[WS8080] Disconnected, reconnecting in 5s');
+            setTimeout(connectWebSocket8080, 5000);
+        };
+    }
+    
+    function sendCommandViaWebSocket8080(rawCommand) {
+        if (!ws8080Connected || ws8080.readyState !== WebSocket.OPEN) {
+            addDebug('[WS8080] Not connected, cannot send command', true);
+            showNotification('WebSocket 8080 not connected', true);
+            return false;
+        }
+        const encoded = encodeURIComponent(rawCommand);
+        const httpGetLine = `GET /${encoded} HTTP/1.1`;
+        ws8080.send(httpGetLine);
+        addDebug(`[WS8080] Sent: ${httpGetLine}`);
+        addTerminal(`[WS8080] → ${rawCommand}`);
+        showNotification(`Sent: ${rawCommand.substring(0, 40)}`);
+        return true;
+    }
+    
+    // ========== ORIGINAL SOCAT METHOD (unchanged) ==========
+    async function isOnline() {
+        if (!navigator.onLine) return false;
+        try {
+            await fetch("https://www.google.com/favicon.ico", { method: "GET", mode: "no-cors", cache: "no-store" });
+            return true;
+        } catch (e) { return false; }
+    }
+    
+    async function executeCommand(fullUrl, sourceId, cmd) {
+        if (!fullUrl || fullUrl.trim() === "") { showNotification("Empty URL", true); return; }
+        const online = await isOnline();
+        if (!online) { alert("Please Connect to Internet"); return; }
+        addDebug(`🚀 EXEC: ${sourceId} → ${fullUrl.substring(0, 70)}`);
+        addTerminal(`→ ${sourceId}: ${fullUrl.substring(0, 70)}`);
+        fetch(fullUrl, { method: 'GET', mode: 'no-cors', cache: 'no-store' }).catch(e => addDebug(`Fetch error: ${e}`));
+        if (cmd) {
+            fetch('http://localhost:9500/' + encodeURIComponent(cmd), { mode: 'no-cors' }).catch(e => addDebug(`Terminal fetch error: ${e}`));
+        }
+        showNotification(`🚀 ${sourceId}`);
+    }
+    
+    // ========== BUTTON MANAGEMENT (unchanged from original) ==========
+    function saveToLocalStorage() {
+        const saveObj = {};
+        for (let [id, data] of buttonDataMap.entries()) saveObj[id] = { link: data.link, label: data.label, category: data.category || '' };
+        localStorage.setItem('startdesktop_active_buttons', JSON.stringify(saveObj));
+        document.getElementById('saveIndicator').classList.add('show');
+        setTimeout(() => document.getElementById('saveIndicator').classList.remove('show'), 800);
+        addDebug("💾 Auto-saved");
+    }
+    function loadFromLocalStorage() {
+        const saved = localStorage.getItem('startdesktop_active_buttons');
+        if (!saved) return false;
+        try {
+            const parsed = JSON.parse(saved);
+            let loaded = 0;
+            for (let [id, data] of Object.entries(parsed)) {
+                if (buttonDataMap.has(id) && data.link && data.label) {
+                    buttonDataMap.set(id, { link: data.link, label: data.label.substring(0, 60), category: data.category || '' });
+                    loaded++;
+                }
+            }
+            if (loaded) addDebug(`📀 Loaded ${loaded} buttons`);
+            return loaded > 0;
+        } catch(e) { return false; }
+    }
+    function naturalSort(ids) {
+        return ids.sort((a, b) => {
+            const matchA = a.match(/([A-Za-z]+)(\d+)/);
+            const matchB = b.match(/([A-Za-z]+)(\d+)/);
+            if (matchA && matchB) {
+                const prefixCompare = matchA[1].localeCompare(matchB[1]);
+                if (prefixCompare !== 0) return prefixCompare;
+                return parseInt(matchA[2]) - parseInt(matchB[2]);
+            }
+            return a.localeCompare(b);
+        });
+    }
+    function editButtonLink(buttonId, currentLink) {
+        let newLink = prompt(`✏️ Edit URL for "${buttonId}":`, currentLink);
+        if (newLink && newLink.trim()) {
+            const data = buttonDataMap.get(buttonId);
+            if (data) { data.link = newLink.trim(); buttonDataMap.set(buttonId, data); if (autoSave) saveToLocalStorage(); addDebug(`🔗 Edited link: ${buttonId}`); return true; }
+        }
+        return false;
+    }
+    function editButtonLabel(buttonId, currentLabel) {
+        let newLabel = prompt(`✏️ Edit NAME for "${buttonId}":`, currentLabel);
+        if (newLabel && newLabel.trim()) {
+            const data = buttonDataMap.get(buttonId);
+            if (data) { data.label = newLabel.trim().substring(0, 45); buttonDataMap.set(buttonId, data); if (autoSave) saveToLocalStorage(); addDebug(`🏷️ Edited label: ${buttonId}`); return true; }
+        }
+        return false;
+    }
+    function editButtonCategory(buttonId, currentCategory) {
+        let newCategory = prompt(`✏️ Edit CATEGORY for "${buttonId}":`, currentCategory || '');
+        if (newCategory !== null) {
+            const data = buttonDataMap.get(buttonId);
+            if (data) { data.category = newCategory.trim().substring(0, 30); buttonDataMap.set(buttonId, data); if (autoSave) saveToLocalStorage(); addDebug(`📂 Edited category for ${buttonId}`); return true; }
+        }
+        return false;
+    }
+    
+    function createButtonElement(buttonId, colorBg = "#2c3e50") {
+        const data = buttonDataMap.get(buttonId);
+        if (!data) return document.createElement('div');
+        const btn = document.createElement('div');
+        btn.className = 'action-btn';
+        btn.setAttribute('draggable', 'true');
+        btn.setAttribute('data-id', buttonId);
+        btn.style.background = colorBg;
+        const displayLink = data.link.length > 48 ? data.link.substring(0, 45) + '...' : data.link;
+        const cmdMatch = data.link.match(/\/([^\/]+)$/);
+        const cmdValue = cmdMatch ? cmdMatch[1] : '';
+        btn.innerHTML = `
+            <div class="drag-handle" title="Drag to reorder">⋮⋮</div>
+            <div class="edit-label-icon" title="Edit Button Name">✏️🏷️</div>
+            <div class="edit-icon" title="Edit URL/Link">🔗✏️</div>
+            <div class="btn-title">${escapeHtml(data.label)}</div>
+            <div class="btn-id-category-row"><span class="btn-id">${buttonId}</span><span class="btn-category" title="Click to Edit Details">📁 ${escapeHtml(data.category || 'Uncategorized')}</span></div>
+            <div class="btn-link-preview">${escapeHtml(displayLink)}</div>
+        `;
+        btn.querySelector('.btn-title').addEventListener('click', (e) => { e.stopPropagation(); executeCommand(data.link, buttonId, cmdValue); });
+        btn.querySelector('.edit-label-icon').addEventListener('click', (e) => { e.stopPropagation(); if (editButtonLabel(buttonId, data.label)) btn.querySelector('.btn-title').textContent = buttonDataMap.get(buttonId).label; });
+        btn.querySelector('.edit-icon').addEventListener('click', (e) => { e.stopPropagation(); if (editButtonLink(buttonId, data.link)) { const newData = buttonDataMap.get(buttonId); btn.querySelector('.btn-link-preview').textContent = newData.link.length > 48 ? newData.link.substring(0,45)+'...' : newData.link; } });
+        btn.querySelector('.btn-category').addEventListener('click', (e) => { e.stopPropagation(); if (editButtonCategory(buttonId, data.category)) btn.querySelector('.btn-category').textContent = `📁 ${escapeHtml(buttonDataMap.get(buttonId).category || 'Uncategorized')}`; });
+        btn.addEventListener('dragstart', (e) => { dragSourceElement = btn; e.dataTransfer.effectAllowed = 'move'; });
+        btn.addEventListener('dragover', (e) => e.preventDefault());
+        btn.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (dragSourceElement && dragSourceElement !== btn && dragSourceElement.parentNode === btn.parentNode) {
+                const parent = btn.parentNode;
+                const children = Array.from(parent.children);
+                const srcIdx = children.indexOf(dragSourceElement);
+                const dstIdx = children.indexOf(btn);
+                if (srcIdx < dstIdx) parent.insertBefore(dragSourceElement, btn.nextSibling);
+                else parent.insertBefore(dragSourceElement, btn);
+                addDebug("🔄 Reordered buttons");
+                if (autoSave) saveToLocalStorage();
+            }
+            dragSourceElement = null;
+        });
+        return btn;
+    }
+    
+    function renderAllButtons() {
+        if (!buttonsGridEl) return;
+        buttonsGridEl.innerHTML = '';
+        const sortedIds = naturalSort(Array.from(buttonDataMap.keys()));
+        sortedIds.forEach(id => { buttonsGridEl.appendChild(createButtonElement(id, "#2c3e50")); });
+        addDebug(`🎨 Rendered ${buttonDataMap.size} buttons`);
+    }
+    
+    function filterButtons() {
+        const term = searchInput.value.toLowerCase().trim();
+        const buttons = document.querySelectorAll('.action-btn');
+        let visibleCount = 0;
+        buttons.forEach(btn => {
+            const title = btn.querySelector('.btn-title')?.textContent.toLowerCase() || '';
+            const id = btn.querySelector('.btn-id')?.textContent.toLowerCase() || '';
+            const link = btn.querySelector('.btn-link-preview')?.textContent.toLowerCase() || '';
+            const category = btn.querySelector('.btn-category')?.textContent.toLowerCase() || '';
+            const matches = !term || title.includes(term) || id.includes(term) || link.includes(term) || category.includes(term);
+            btn.style.display = matches ? 'flex' : 'none';
+            if (matches) visibleCount++;
+        });
+        let noResultsMsg = document.getElementById('noResultsMsg');
+        if (term && visibleCount === 0) {
+            if (!noResultsMsg) { noResultsMsg = document.createElement('div'); noResultsMsg.id = 'noResultsMsg'; noResultsMsg.className = 'no-results-message'; buttonsGridEl.appendChild(noResultsMsg); }
+            noResultsMsg.innerHTML = `🔍 No buttons found matching "<strong>${escapeHtml(term)}</strong>"`;
+        } else if (noResultsMsg) { noResultsMsg.remove(); }
+    }
+    
+    // ========== PROFILE FUNCTIONS (unchanged) ==========
+    function generateButtonEditorRows() {
+        const container = document.getElementById('buttonsEditorGrid');
+        if (!container) return;
+        container.innerHTML = '';
+        for (let i = 1; i <= 20; i++) {
+            const id = `A${i}`;
+            const currentData = buttonDataMap.get(id) || { label: '', link: '', category: '' };
+            const row = document.createElement('div');
+            row.className = 'button-editor-row';
+            row.style.background = 'var(--bg)';
+            row.style.padding = '10px';
+            row.style.borderRadius = '8px';
+            row.style.borderLeft = '3px solid var(--accent)';
+            row.style.marginBottom = '8px';
+            row.innerHTML = `
+                <div style="font-weight: bold; margin-bottom: 5px;">${id}</div>
+                <input type="text" id="edit_label_${id}" placeholder="Label" value="${escapeHtml(currentData.label || '')}" style="width:100%; margin-bottom:5px; padding:6px; background:var(--panel); border:1px solid var(--border); border-radius:6px; color:var(--text);">
+                <input type="text" id="edit_category_${id}" placeholder="Category" value="${escapeHtml(currentData.category || '')}" style="width:100%; margin-bottom:5px; padding:6px; background:var(--panel); border:1px solid var(--border); border-radius:6px; color:var(--text);">
+                <input type="text" id="edit_link_${id}" placeholder="URL" value="${escapeHtml(currentData.link || '')}" style="width:100%; padding:6px; background:var(--panel); border:1px solid var(--border); border-radius:6px; color:var(--text);">
+            `;
+            container.appendChild(row);
+        }
+    }
+    
+    function collectEditorButtons() {
+        for (let i = 1; i <= 20; i++) {
+            const id = `A${i}`;
+            const label = document.getElementById(`edit_label_${id}`)?.value || '';
+            const category = document.getElementById(`edit_category_${id}`)?.value || '';
+            const link = document.getElementById(`edit_link_${id}`)?.value || '';
+            if (link) buttonDataMap.set(id, { link, label, category });
+        }
+    }
+    
+    function saveCurrentProfile() {
+        const profileName = document.getElementById('profileName')?.value.trim();
+        if (!profileName) { showNotification('Please enter a profile name', true); return; }
+        collectEditorButtons();
+        const profileButtons = {};
+        for (let i = 1; i <= 20; i++) {
+            const id = `A${i}`;
+            const data = buttonDataMap.get(id);
+            if (data && data.link) profileButtons[id] = { link: data.link, label: data.label || '', category: data.category || '' };
+        }
+        const profileId = (currentProfileId || profileName.toLowerCase().replace(/[^a-z0-9]/g, '_'));
+        allProfiles[profileId] = {
+            name: profileName,
+            description: document.getElementById('profileDescription')?.value || '',
+            created: new Date().toISOString(),
+            buttons: profileButtons
+        };
+        localStorage.setItem('startdesktop_profiles', JSON.stringify(allProfiles));
+        currentProfileId = profileId;
+        updateProfileDropdown();
+        showNotification(`Profile "${profileName}" saved`);
+        addDebug(`📁 Profile saved: ${profileName}`);
+    }
+    
+    function loadSelectedProfile() {
+        const dropdown = document.getElementById('profileSelectDropdown');
+        const profileId = dropdown?.value;
+        if (!profileId || !allProfiles[profileId]) { showNotification('Select a profile first', true); return; }
+        const profile = allProfiles[profileId];
+        document.getElementById('profileName').value = profile.name;
+        document.getElementById('profileDescription').value = profile.description || '';
+        for (let i = 1; i <= 20; i++) {
+            const id = `A${i}`;
+            const btnData = profile.buttons?.[id] || { label: '', link: '', category: '' };
+            const labelInput = document.getElementById(`edit_label_${id}`);
+            const categoryInput = document.getElementById(`edit_category_${id}`);
+            const linkInput = document.getElementById(`edit_link_${id}`);
+            if (labelInput) labelInput.value = btnData.label || '';
+            if (categoryInput) categoryInput.value = btnData.category || '';
+            if (linkInput) linkInput.value = btnData.link || '';
+        }
+        buttonDataMap.clear();
+        for (const [id, data] of Object.entries(profile.buttons)) {
+            buttonDataMap.set(id, { link: data.link, label: data.label || '', category: data.category || '' });
+        }
+        renderAllButtons();
+        saveToLocalStorage();
+        currentProfileId = profileId;
+        showNotification(`Loaded profile: ${profile.name}`);
+    }
+    
+    function deleteCurrentProfile() {
+        if (!currentProfileId) { showNotification('No profile selected', true); return; }
+        if (!confirm(`Delete profile "${allProfiles[currentProfileId]?.name}"?`)) return;
+        delete allProfiles[currentProfileId];
+        localStorage.setItem('startdesktop_profiles', JSON.stringify(allProfiles));
+        currentProfileId = null;
+        document.getElementById('profileName').value = '';
+        document.getElementById('profileDescription').value = '';
+        generateButtonEditorRows();
+        updateProfileDropdown();
+        showNotification('Profile deleted');
+    }
+    
+    function updateProfileDropdown() {
+        const dropdown = document.getElementById('profileSelectDropdown');
+        if (!dropdown) return;
+        dropdown.innerHTML = '<option value="">-- Select Profile --</option>';
+        for (const [id, profile] of Object.entries(allProfiles)) {
+            dropdown.innerHTML += `<option value="${id}">${escapeHtml(profile.name)} (${Object.keys(profile.buttons || {}).length} buttons)</option>`;
+        }
+        if (currentProfileId && allProfiles[currentProfileId]) dropdown.value = currentProfileId;
+    }
+    
+    function loadProfileToDashboard() {
+        if (Object.keys(allProfiles).length === 0) {
+            showNotification('No profiles found. Create one in Profile Manager first.', true);
+            return;
+        }
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 10000;';
+        let options = '';
+        for (const [id, profile] of Object.entries(allProfiles)) {
+            options += `<div class="profile-opt" data-id="${id}" style="padding:10px; margin:5px; background:var(--card); border-radius:8px; cursor:pointer;">${escapeHtml(profile.name)}<br><small>${Object.keys(profile.buttons || {}).length} buttons</small></div>`;
+        }
+        modal.innerHTML = `<div style="background: var(--panel); border-radius: 16px; padding: 20px; max-width: 400px; width: 90%;"><h3>📂 Load Profile</h3><div id="profileList" style="max-height:300px; overflow-y:auto; margin:15px 0;">${options}</div><button id="closeModal" style="width:100%; padding:10px; background:var(--button-bg); border:none; border-radius:8px; color:white; cursor:pointer;">Cancel</button></div>`;
+        document.body.appendChild(modal);
+        document.querySelectorAll('.profile-opt').forEach(opt => {
+            opt.onclick = () => {
+                const profileId = opt.dataset.id;
+                const profile = allProfiles[profileId];
+                if (profile && profile.buttons) {
+                    buttonDataMap.clear();
+                    for (const [id, data] of Object.entries(profile.buttons)) {
+                        buttonDataMap.set(id, { link: data.link, label: data.label || '', category: data.category || '' });
+                    }
+                    renderAllButtons();
+                    saveToLocalStorage();
+                    showNotification(`Loaded: ${profile.name}`);
+                }
+                modal.remove();
+            };
+        });
+        document.getElementById('closeModal').onclick = () => modal.remove();
+    }
+    
+    function newProfile() {
+        currentProfileId = null;
+        document.getElementById('profileName').value = '';
+        document.getElementById('profileDescription').value = '';
+        generateButtonEditorRows();
+        showNotification('New profile ready. Edit buttons and click Save.');
+    }
+    
+    // ========== SOCAT GROUPS (unchanged) ==========
+    function initSocatGroups() {
+        const container = document.getElementById('socatGroupsContainer');
+        if (!container) return;
+        container.innerHTML = `
+            <div class="socat-group" data-group="group1"><div class="socat-group-header"><span>🚀 Port 9000-9019 (App Launchers)</span><span class="group-arrow">▼</span></div>
+            <div class="socat-group-items collapsed">${generateSocatItems(9000, 9019)}</div></div>
+            <div class="socat-group" data-group="group2"><div class="socat-group-header"><span>🎮 Port 9020-9039 (Media & Gaming)</span><span class="group-arrow">▼</span></div>
+            <div class="socat-group-items collapsed">${generateSocatItems(9020, 9039)}</div></div>
+            <div class="socat-group" data-group="group3"><div class="socat-group-header"><span>🔧 Port 9040-9059 (Advanced Tools)</span><span class="group-arrow">▼</span></div>
+            <div class="socat-group-items collapsed">${generateSocatItems(9040, 9059)}</div></div>
+            <div class="socat-note">⬅️ Click: Open - Then Load Buttons</div>`;
+        
+        document.querySelectorAll('.socat-group').forEach(group => {
+            const header = group.querySelector('.socat-group-header');
+            const items = group.querySelector('.socat-group-items');
+            const arrow = header.querySelector('.group-arrow');
+            const groupId = group.getAttribute('data-group');
+            const savedState = localStorage.getItem(`socat_group_${groupId}`);
+            if (savedState === 'expanded') { items.classList.remove('collapsed'); arrow.classList.remove('collapsed'); }
+            header.addEventListener('click', (e) => {
+                e.stopPropagation();
+                items.classList.toggle('collapsed');
+                arrow.classList.toggle('collapsed');
+                localStorage.setItem(`socat_group_${groupId}`, items.classList.contains('collapsed') ? 'collapsed' : 'expanded');
+            });
+        });
+        document.querySelectorAll('.socat-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const url = item.getAttribute('data-url');
+                const port = item.getAttribute('data-port');
+                const command = item.getAttribute('data-command');
+                const title = item.querySelector('.socat-item-title')?.innerText || '';
+                if (url) {
+                    document.getElementById('linkInput').value = 'http://localhost:';
+                    document.getElementById('portInput').value = port;
+                    document.getElementById('commandInput').value = command;
+                    addDebug(`SOCAT selected: ${title} (port ${port})`);
+                    addTerminal(`📡 Selected SOCAT server: ${title} on port ${port}`);
+                    showNotification(`Loaded: ${title}`);
+                }
+            });
+        });
+    }
+    
+    function generateSocatItems(startPort, endPort) {
+        let html = '';
+        const apps = ['App', 'Tool', 'Utility', 'Service', 'Manager'];
+        for (let port = startPort; port <= endPort; port++) {
+            const appName = apps[port % apps.length];
+            html += `<div class="socat-item" data-url="http://localhost:${port}/socat${port}" data-port="${port}" data-command="/socat${port}">
+                <div class="socat-item-title">${appName} ${port}</div>
+                <div class="socat-item-url">http://localhost:${port}/socat${port}</div>
+            </div>`;
+        }
+        return html;
+    }
+    
+    function initDefaultButtons() {
+        buttonDataMap.clear();
+        const defaultLabels = ["🎬 VLC Player", "🦊 Firefox", "💻 Terminal", "📁 File Manager", "📊 System Monitor", "✏️ Text Editor", "🧮 Calculator", "📸 Screenshot", "💾 Disk Usage", "📦 Updater", "🎬 Kodi", "🎵 Audacious", "📥 Transmission", "💿 GParted", "🎥 Peek", "🖥️ Remmina", "📦 Synaptic", "📦 Flatpak", "🍾 Bottles", "🖥️ VM Manager"];
+        const defaultCmds = ["vlc", "firefox", "gnome-terminal", "nautilus", "gnome-system-monitor", "gedit", "gnome-calculator", "gnome-screenshot", "baobab", "software-properties-gtk", "kodi", "audacious", "transmission-gtk", "gparted", "peek", "remmina", "synaptic", "flatpak", "bottles", "virt-manager"];
+        const defaultCategories = ["Multimedia", "Internet", "System", "System", "System", "Office", "Utility", "Utility", "System", "System", "Multimedia", "Audio", "Download", "System", "Screen Capture", "Remote", "Package", "Package", "Wine", "Virtualization"];
+        for (let i = 1; i <= 20; i++) { const id = `A${i}`; buttonDataMap.set(id, { link: `http://localhost:9001/${defaultCmds[i-1]}`, label: defaultLabels[i-1], category: defaultCategories[i-1] }); }
+        addDebug("🔧 Default buttons initialized");
+    }
+    
+    function resetToDefaults() {
+        if (confirm('Reset all buttons to factory defaults?')) {
+            initDefaultButtons();
+            renderAllButtons();
+            saveToLocalStorage();
+            generateButtonEditorRows();
+            showNotification('Reset to defaults');
+        }
+    }
+    
+    function clearAllData() {
+        if (confirm('Clear ALL localStorage data? This will delete all profiles.')) {
+            localStorage.clear();
+            allProfiles = {};
+            initDefaultButtons();
+            renderAllButtons();
+            saveToLocalStorage();
+            generateButtonEditorRows();
+            updateProfileDropdown();
+            showNotification('All data cleared.');
+        }
+    }
+    
+    // ========== UI INITIALIZATION ==========
+    let sectionsExpanded = true;
+    function toggleBothSections() {
+        sectionsExpanded = !sectionsExpanded;
+        document.getElementById('socatContent').classList.toggle('collapsed', !sectionsExpanded);
+        document.getElementById('terminalContent').classList.toggle('collapsed', !sectionsExpanded);
+        document.getElementById('socatArrow').classList.toggle('collapsed', !sectionsExpanded);
+        document.getElementById('terminalArrow').classList.toggle('collapsed', !sectionsExpanded);
+    }
+    document.getElementById('socatHeader')?.addEventListener('click', toggleBothSections);
+    document.getElementById('terminalHeader')?.addEventListener('click', toggleBothSections);
+    
+    function initTabs() {
+        document.querySelectorAll('.main-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabId = tab.dataset.tab;
+                document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tabId).classList.add('active');
+                if (tabId === 'profilemanager') { generateButtonEditorRows(); updateProfileDropdown(); }
+            });
+        });
+    }
+    
+    function initSettings() {
+        const autoSaveToggle = document.getElementById('autoSaveToggle');
+        const savedAutoSave = localStorage.getItem('autoSave') !== 'false';
+        autoSave = savedAutoSave;
+        autoSaveToggle.style.background = autoSave ? '#2ecc71' : '#555';
+        autoSaveToggle.innerHTML = autoSave ? '<div style="position: absolute; width: 20px; height: 20px; background: white; border-radius: 50%; top: 2px; right: 4px;"></div>' : '<div style="position: absolute; width: 20px; height: 20px; background: white; border-radius: 50%; top: 2px; left: 4px;"></div>';
+        autoSaveToggle.onclick = () => {
+            autoSave = !autoSave;
+            autoSaveToggle.style.background = autoSave ? '#2ecc71' : '#555';
+            autoSaveToggle.innerHTML = autoSave ? '<div style="position: absolute; width: 20px; height: 20px; background: white; border-radius: 50%; top: 2px; right: 4px;"></div>' : '<div style="position: absolute; width: 20px; height: 20px; background: white; border-radius: 50%; top: 2px; left: 4px;"></div>';
+            localStorage.setItem('autoSave', autoSave);
+            addDebug(`Auto-save: ${autoSave ? 'ON' : 'OFF'}`);
+        };
+        document.getElementById('clearStorageBtn')?.addEventListener('click', clearAllData);
+        document.getElementById('reconnectWsBtn')?.addEventListener('click', reconnectWebSocket);
+    }
+    
+    function setupDarkMode() {
+        const darkModeBtn = document.getElementById('darkModeBtn');
+        const isDark = localStorage.getItem('darkMode') === 'true';
+        if (isDark) document.body.classList.add('dark');
+        darkModeBtn.textContent = isDark ? '☀️ Light' : '🌙 Dark';
+        darkModeBtn.onclick = () => {
+            document.body.classList.toggle('dark');
+            const dark = document.body.classList.contains('dark');
+            localStorage.setItem('darkMode', dark);
+            darkModeBtn.textContent = dark ? '☀️ Light' : '🌙 Dark';
+            addDebug(`Dark mode: ${dark ? 'ON' : 'OFF'}`);
+        };
+    }
+    
+    function setupDebugPanel() {
+        const debugHeader = document.getElementById('debugHeader');
+        const debugContent = document.getElementById('debugContent');
+        debugHeader.onclick = () => {
+            debugContent.classList.toggle('collapsed');
+            const span = debugHeader.querySelector('span:last-child');
+            if(span) span.textContent = debugContent.classList.contains('collapsed') ? '▲' : '▼';
+        };
+    }
+    
+    function assembleAndRun() {
+        let fullUrl = document.getElementById('linkInput').value + document.getElementById('portInput').value + document.getElementById('commandInput').value;
+        if (!fullUrl.startsWith('http')) fullUrl = 'http://' + fullUrl;
+        const cmd = document.getElementById('commandInput').value.replace(/^\//, '');
+        executeCommand(fullUrl, 'Builder', cmd);
+    }
+    
+    function loadSavedProfiles() {
+        const saved = localStorage.getItem('startdesktop_profiles');
+        if (saved) {
+            try {
+                allProfiles = JSON.parse(saved);
+                addDebug(`📁 Loaded ${Object.keys(allProfiles).length} profiles`);
+            } catch(e) { allProfiles = {}; }
+        }
+        updateProfileDropdown();
+    }
+    
+    // ========== INIT ==========
+    function init() {
+        initDefaultButtons();
+        if (!loadFromLocalStorage()) saveToLocalStorage();
+        renderAllButtons();
+        initSocatGroups();
+        setupDarkMode();
+        initTabs();
+        initSettings();
+        setupDebugPanel();
+        loadSavedProfiles();
+        generateButtonEditorRows();
+        
+        // Connect WebSocket for terminal output (port 3001)
+        connectWebSocket();
+        // Connect WebSocket 8080 for command sending
+        connectWebSocket8080();
+        
+        // Event listeners
+        document.getElementById('runBtn')?.addEventListener('click', assembleAndRun);
+        document.getElementById('portPlus')?.addEventListener('click', () => { let v = parseInt(portInput.value,10)||9000; v=Math.min(9999,v+1); portInput.value=v; });
+        document.getElementById('portMinus')?.addEventListener('click', () => { let v = parseInt(portInput.value,10)||9000; v=Math.max(1,v-1); portInput.value=v; });
+        document.getElementById('clearSearchBtn')?.addEventListener('click', () => { searchInput.value = ''; filterButtons(); });
+        searchInput.addEventListener('input', filterButtons);
+        document.getElementById('resetBtn')?.addEventListener('click', resetToDefaults);
+        document.getElementById('loadProfileBtn')?.addEventListener('click', loadProfileToDashboard);
+        document.getElementById('clearTerminalBtn')?.addEventListener('click', clearTerminalDisplay);
+        
+        // Profile Manager buttons
+        document.getElementById('newProfileBtn')?.addEventListener('click', newProfile);
+        document.getElementById('saveProfileBtn')?.addEventListener('click', saveCurrentProfile);
+        document.getElementById('deleteProfileBtn')?.addEventListener('click', deleteCurrentProfile);
+        document.getElementById('loadProfileDropdownBtn')?.addEventListener('click', loadSelectedProfile);
+        
+        // NEW: WebSocket 8080 send button
+        const ws8080SendBtn = document.getElementById('runWebsocket8080Btn');
+        const ws8080Input = document.getElementById('websocket8080Input');
+        if (ws8080SendBtn && ws8080Input) {
+            ws8080SendBtn.addEventListener('click', () => {
+                const cmd = ws8080Input.value.trim();
+                if (!cmd) { showNotification('Enter a command', true); return; }
+                sendCommandViaWebSocket8080(cmd);
+            });
+        }
+        
+        addDebug("🎯 StartDesktop V2.5 Ready — Dual Method: socat (port 9000) + WebSocket 8080");
+        showNotification('V2.5 Ready - Two command methods available');
+    }
+    
+    init();
+</script>
+</body>
+</html>
